@@ -1,8 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import Countries from "./data/countries.json";
-import { UserSettings } from "../core/game/UserSettings";
-
+import { ModalOverlay } from "./components/ModalOverlay";
 const flagKey: string = "flag";
 
 @customElement("flag-input")
@@ -10,7 +9,6 @@ export class FlagInput extends LitElement {
   @state() private flag: string = "";
   @state() private search: string = "";
   @state() private showModal: boolean = false;
-  private userSettings: UserSettings = new UserSettings();
 
   static styles = css`
     @media (max-width: 768px) {
@@ -29,11 +27,10 @@ export class FlagInput extends LitElement {
   }
 
   private setFlag(flag: string) {
-    if (flag == "") {
-      this.flag = "";
-    } else {
-      this.flag = flag;
+    if (flag == "xx") {
+      flag = "";
     }
+    this.flag = flag;
     this.showModal = false;
     this.storeFlag(flag);
   }
@@ -80,6 +77,12 @@ export class FlagInput extends LitElement {
 
   render() {
     return html`
+      <div
+        class="absolute left-0 top-0 w-full h-full ${this.showModal
+          ? ""
+          : "hidden"}"
+        @click=${() => (this.showModal = false)}
+      ></div>
       <div class="flex relative">
         <button
           @click=${() => (this.showModal = !this.showModal)}

@@ -207,6 +207,12 @@ export class HelpModal extends LitElement {
         class="modal-overlay"
         style="display: ${this.isModalOpen ? "flex" : "none"}"
       >
+      <div
+        class="absolute left-0 top-0 w-full h-full ${
+          this.isModalOpen ? "" : "hidden"
+        }"
+        @click=${this.close}
+      ></div>
         <div class="modal-content">
           <span class="close" @click=${this.close}>&times;</span>
 
@@ -311,7 +317,8 @@ export class HelpModal extends LitElement {
               <p class="mb-4">Right clicking (or touch on mobile) opens the radial menu. From there you can:</p>
               <ul>
                 <li class="mb-4"><div class="inline-block icon build-icon"></div> - Open the build menu.</li>
-                <li class="mb-4"><div class="inline-block icon info-icon"></div> - Open the Info menu.</li>
+                <li class="mb-4">
+                  <img src="/images/InfoIcon.svg" class="inline-block icon" style="fill: white; background: transparent;"/> - Open the Info menu.</li>
                 <li class="mb-4"><div class="inline-block icon boat-icon"></div> - Send a boat to attack at the selected location (only available if you have access to water).</li>
                 <li class="mb-4"><div class="inline-block icon cancel-icon"></div> - Close the menu.</li>
               </ul>
@@ -463,5 +470,6 @@ export class HelpModal extends LitElement {
 
   public close() {
     this.isModalOpen = false;
+    console.log("closing modal");
   }
 }

@@ -162,6 +162,7 @@ export class NameLayer implements Layer {
     iconsDiv.style.justifyContent = "center";
     iconsDiv.style.alignItems = "center";
     iconsDiv.style.zIndex = "2";
+    iconsDiv.style.opacity = "0.8";
     element.appendChild(iconsDiv);
 
     const nameDiv = document.createElement("div");

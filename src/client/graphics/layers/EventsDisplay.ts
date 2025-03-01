@@ -55,6 +55,15 @@ export class EventsDisplay extends LitElement implements Layer {
   @state() private incomingAttacks: AttackUpdate[] = [];
   @state() private outgoingAttacks: AttackUpdate[] = [];
   @state() private _hidden: boolean = false;
+  @state() private newEvents: number = 0;
+
+  private toggleHidden() {
+    this._hidden = !this._hidden;
+    if (this._hidden) {
+      this.newEvents = 0;
+    }
+    this.requestUpdate();
+  }
 
   private updateMap = new Map([
     [GameUpdateType.DisplayEvent, (u) => this.onDisplayMessageEvent(u)],
@@ -121,6 +130,9 @@ export class EventsDisplay extends LitElement implements Layer {
 
   private addEvent(event: Event) {
     this.events = [...this.events, event];
+    if (this._hidden == true) {
+      this.newEvents++;
+    }
     this.requestUpdate();
   }
 
@@ -414,7 +426,7 @@ export class EventsDisplay extends LitElement implements Layer {
                 ._hidden
                 ? "hidden"
                 : ""}"
-              @click=${() => (this._hidden = true)}
+              @click=${this.toggleHidden}
             >
               Hide
             </button>
@@ -423,9 +435,15 @@ export class EventsDisplay extends LitElement implements Layer {
             class="text-white cursor-pointer pointer-events-auto ${this._hidden
               ? ""
               : "hidden"}"
-            @click=${() => (this._hidden = false)}
+            @click=${this.toggleHidden}
           >
             Events
+            <span
+              class="${this.newEvents
+                ? ""
+                : "hidden"} inline-block px-2 bg-red-500 rounded-sm"
+              >${this.newEvents}</span
+            >
           </button>
           <table
             class="w-full border-collapse text-white shadow-lg lg:text-xl text-xs ${this

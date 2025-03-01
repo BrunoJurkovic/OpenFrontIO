@@ -233,6 +233,11 @@ export class JoinPrivateLobbyModal extends LitElement {
         class="modal-overlay"
         style="display: ${this.isModalOpen ? "flex" : "none"}"
       >
+        <div
+          style="position: absolute; left: 0px; top: 0px; width: 100%; height: 100%;"
+          class="${this.isModalOpen ? "" : "hidden"}"
+          @click=${this.close}
+        ></div>
         <div class="modal-content">
           <span class="close" @click=${this.closeAndLeave}>&times;</span>
           <div class="title">Join Private Lobby</div>

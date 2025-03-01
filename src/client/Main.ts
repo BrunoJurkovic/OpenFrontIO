@@ -108,9 +108,9 @@ class Client {
       });
 
     if (this.userSettings.darkMode()) {
-      document.body.classList.add("dark");
+      document.documentElement.classList.add("dark");
     } else {
-      document.body.classList.remove("dark");
+      document.documentElement.classList.remove("dark");
     }
     page("/join/:lobbyId", (ctx) => {
       if (ctx.init && sessionStorage.getItem("inLobby")) {
