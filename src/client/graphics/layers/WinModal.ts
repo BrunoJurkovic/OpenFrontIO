@@ -177,7 +177,7 @@ export class WinModal extends LitElement implements Layer {
       class="adsbygoogle"
       style="display:block"
       data-ad-client="ca-pub-7035513310742290"
-      data-ad-slot="3772893937"
+      data-ad-slot="winmodalad"
       data-ad-format="auto"
       data-full-width-responsive="true"
     ></ins>`;
