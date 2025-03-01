@@ -306,3 +306,19 @@ export function generateID(): GameID {
   );
   return nanoid();
 }
+
+export function toInt(num: number): bigint {
+  return BigInt(Math.floor(num));
+}
+
+export function maxInt(a: bigint, b: bigint): bigint {
+  return a > b ? a : b;
+}
+
+export function minInt(a: bigint, b: bigint): bigint {
+  return a < b ? a : b;
+}
+export function withinInt(num: bigint, min: bigint, max: bigint): bigint {
+  const atLeastMin = maxInt(num, min);
+  return minInt(atLeastMin, max);
+}

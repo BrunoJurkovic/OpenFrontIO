@@ -26,9 +26,12 @@ import {
   assertNever,
   closestOceanShoreFromPlayer,
   distSortUnit,
+  maxInt,
+  minInt,
   simpleHash,
   sourceDstOceanShore,
   targetTransportTile,
+  toInt,
   within,
 } from "../Util";
 import { CellString, GameImpl } from "./GameImpl";
@@ -37,7 +40,6 @@ import { MessageType } from "./Game";
 import { renderTroops } from "../../client/Utils";
 import { TerraNulliusImpl } from "./TerraNulliusImpl";
 import { andFN, manhattanDistFN, TileRef } from "./GameMap";
-import { Emoji } from "discord.js";
 import { AttackImpl } from "./AttackImpl";
 
 interface Target {
@@ -55,10 +57,12 @@ class Donation {
 export class PlayerImpl implements Player {
   public _lastTileChange: number = 0;
 
-  private _gold: Gold;
-  private _troops: number;
-  private _workers: number;
-  private _targetTroopRatio: number = 1;
+  private _gold: bigint;
+  private _troops: bigint;
+  private _workers: bigint;
+
+  // 0 to 100
+  private _targetTroopRatio: bigint = 100n;
 
   isTraitor_ = false;
 
@@ -88,14 +92,14 @@ export class PlayerImpl implements Player {
     private mg: GameImpl,
     private _smallID: number,
     private readonly playerInfo: PlayerInfo,
-    startPopulation: number,
+    startTroops: number,
   ) {
     this._flag = playerInfo.flag;
     this._name = playerInfo.name;
-    this._targetTroopRatio = 1;
-    this._troops = startPopulation * this._targetTroopRatio;
-    this._workers = startPopulation * (1 - this._targetTroopRatio);
-    this._gold = 0;
+    this._targetTroopRatio = 100n;
+    this._troops = toInt(startTroops);
+    this._workers = 0n;
+    this._gold = 0n;
     this._displayName = this._name; // processName(this._name)
   }
 
@@ -113,7 +117,7 @@ export class PlayerImpl implements Player {
       playerType: this.type(),
       isAlive: this.isAlive(),
       tilesOwned: this.numTilesOwned(),
-      gold: this._gold,
+      gold: Number(this._gold),
       population: this.population(),
       workers: this.workers(),
       troops: this.troops(),
@@ -229,7 +233,7 @@ export class PlayerImpl implements Player {
     return true as const;
   }
   setTroops(troops: number) {
-    this._troops = Math.floor(troops);
+    this._troops = toInt(troops);
   }
   conquer(tile: TileRef) {
     this.mg.conquer(this, tile);
@@ -498,11 +502,11 @@ export class PlayerImpl implements Player {
   }
 
   gold(): Gold {
-    return this._gold;
+    return Number(this._gold);
   }
 
   addGold(toAdd: Gold): void {
-    this._gold += toAdd;
+    this._gold += toInt(toAdd);
   }
 
   removeGold(toRemove: Gold): void {
@@ -511,24 +515,24 @@ export class PlayerImpl implements Player {
         `Player ${this} does not enough gold (${toRemove} vs ${this._gold}))`,
       );
     }
-    this._gold -= toRemove;
+    this._gold -= toInt(toRemove);
   }
 
   population(): number {
-    return this._troops + this._workers;
+    return Number(this._troops + this._workers);
   }
   workers(): number {
-    return Math.max(1, this._workers);
+    return Math.max(1, Number(this._workers));
   }
   addWorkers(toAdd: number): void {
-    this._workers += toAdd;
+    this._workers += toInt(toAdd);
   }
   removeWorkers(toRemove: number): void {
-    this._workers = Math.max(1, this._workers - toRemove);
+    this._workers = maxInt(1n, this._workers - toInt(toRemove));
   }
 
   targetTroopRatio(): number {
-    return this._targetTroopRatio;
+    return Number(this._targetTroopRatio) / 100;
   }
 
   setTargetTroopRatio(target: number): void {
@@ -537,11 +541,11 @@ export class PlayerImpl implements Player {
         `invalid targetTroopRatio ${target} set on player ${PlayerImpl}`,
       );
     }
-    this._targetTroopRatio = target;
+    this._targetTroopRatio = toInt(target * 100);
   }
 
   troops(): number {
-    return this._troops;
+    return Number(this._troops);
   }
 
   addTroops(troops: number): void {
@@ -549,15 +553,15 @@ export class PlayerImpl implements Player {
       this.removeTroops(-1 * troops);
       return;
     }
-    this._troops += Math.floor(troops);
+    this._troops += toInt(troops);
   }
   removeTroops(troops: number): number {
     if (troops <= 1) {
       return 0;
     }
-    const toRemove = Math.floor(Math.min(this._troops - 1, troops));
+    const toRemove = minInt(this._troops, toInt(troops));
     this._troops -= toRemove;
-    return toRemove;
+    return Number(toRemove);
   }
 
   captureUnit(unit: Unit): void {
