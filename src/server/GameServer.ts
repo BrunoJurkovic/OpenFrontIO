@@ -411,7 +411,6 @@ export class GameServer {
     }
     if (this.turns.length % 10 == 0 && this.turns.length != 0) {
       const lastHashTurn = this.turns.length - 10;
-      console.log(`checking validity for turn ${lastHashTurn}`);
 
       let { mostCommonHash, outOfSyncClients } =
         this.findOutOfSyncClients(lastHashTurn);

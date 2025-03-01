@@ -56,7 +56,7 @@ export function startWorker() {
     next();
   });
 
-  app.set("trust proxy", 2);
+  app.set("trust proxy", 3);
   app.use(express.json());
   app.use(express.static(path.join(__dirname, "../../out")));
   app.use(
