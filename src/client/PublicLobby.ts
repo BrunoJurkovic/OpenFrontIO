@@ -36,7 +36,6 @@ export class PublicLobby extends LitElement {
   private async fetchAndUpdateLobbies(): Promise<void> {
     try {
       const lobbies = await this.fetchLobbies();
-      console.log(`got lobbies: ${JSON.stringify(lobbies)}`);
       this.lobbies = lobbies;
     } catch (error) {
       consolex.error("Error fetching lobbies:", error);
