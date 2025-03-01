@@ -8,12 +8,8 @@ export class DevServerConfig extends DefaultServerConfig {
   env(): GameEnv {
     return GameEnv.Dev;
   }
-  gameCreationRate(): number {
-    return 10 * 1000;
-  }
-
-  lobbyLifetime(): number {
-    return 10 * 1000;
+  gameCreationRate(highTraffic: boolean): number {
+    return 5 * 1000;
   }
 
   discordRedirectURI(): string {

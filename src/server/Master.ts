@@ -9,6 +9,7 @@ import { GameInfo } from "../core/Schemas";
 import path from "path";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
+import { isHighTrafficTime } from "./Util";
 
 const config = getServerConfig();
 const readyWorkers = new Set();
@@ -62,19 +63,29 @@ export async function startMaster() {
       console.log(
         `Worker ${workerId} is ready. (${readyWorkers.size}/${config.numWorkers()} ready)`,
       );
-
       // Start scheduling when all workers are ready
       if (readyWorkers.size === config.numWorkers()) {
         console.log("All workers ready, starting game scheduling");
-        // let the workers start up
+
+        // Safe implementation of dynamic interval
+        let timeoutId = null;
+
         const scheduleLobbies = () => {
-          schedulePublicGame().catch((error) => {
-            console.error("Error scheduling public game:", error);
-          });
+          schedulePublicGame()
+            .catch((error) => {
+              console.error("Error scheduling public game:", error);
+            })
+            .finally(() => {
+              // Schedule next run with the current config value
+              const currentLifetime = config.lobbyLifetime(isHighTrafficTime());
+              timeoutId = setTimeout(scheduleLobbies, currentLifetime);
+            });
         };
 
+        // Run first execution immediately
         scheduleLobbies();
-        setInterval(scheduleLobbies, config.gameCreationRate());
+
+        // Regular interval for fetching lobbies
         setInterval(() => fetchLobbies(), 250);
       }
     }
