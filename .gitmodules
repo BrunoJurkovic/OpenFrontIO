@@ -1,0 +1,3 @@
+[submodule "src/server/security-middleware"]
+	path = src/server/security-middleware
+	url = https://github.com/evanpelle/security-middleware.git
