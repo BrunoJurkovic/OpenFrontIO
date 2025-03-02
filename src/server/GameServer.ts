@@ -19,6 +19,7 @@ import { GameType } from "../core/game/Game";
 import { archive } from "./Archive";
 import { Client } from "./Client";
 import { slog } from "./StructuredLog";
+import { securityMiddleware } from "./Security";
 
 export enum GamePhase {
   Lobby = "LOBBY",
@@ -27,11 +28,6 @@ export enum GamePhase {
 }
 
 export class GameServer {
-  private rateLimiter = new RateLimiterMemory({
-    points: 50,
-    duration: 1, // per 1 second
-  });
-
   private outOfSyncClients = new Set<ClientID>();
 
   private maxGameDuration = 3 * 60 * 60 * 1000; // 3 hours
@@ -125,58 +121,55 @@ export class GameServer {
 
     this.allClients.set(client.clientID, client);
 
-    client.ws.on("message", async (message: string) => {
-      try {
-        await this.rateLimiter.consume(client.ip);
-      } catch (error) {
-        console.warn(`Rate limit exceeded for ${client.ip}`);
-        return;
-      }
-      try {
-        let clientMsg: ClientMessage = null;
+    client.ws.on(
+      "message",
+      securityMiddleware.wsHandler(client.ip, async (message: string) => {
         try {
-          clientMsg = ClientMessageSchema.parse(JSON.parse(message));
+          let clientMsg: ClientMessage = null;
+          try {
+            clientMsg = ClientMessageSchema.parse(JSON.parse(message));
+          } catch (error) {
+            throw Error(`error parsing schema for ${client.ip}`);
+          }
+          if (this.allClients.has(clientMsg.clientID)) {
+            const client = this.allClients.get(clientMsg.clientID);
+            if (client.persistentID != clientMsg.persistentID) {
+              console.warn(
+                `Client ID ${clientMsg.clientID} sent incorrect id ${clientMsg.persistentID}, does not match persistent id ${client.persistentID}`,
+              );
+              return;
+            }
+          }
+
+          // Clear out persistent id to make sure it doesn't get sent to other clients.
+          clientMsg.persistentID = null;
+
+          if (clientMsg.type == "intent") {
+            if (clientMsg.gameID == this.id) {
+              this.addIntent(clientMsg.intent);
+            } else {
+              console.warn(
+                `${this.id}: client ${clientMsg.clientID} sent to wrong game`,
+              );
+            }
+          }
+          if (clientMsg.type == "ping") {
+            this.lastPingUpdate = Date.now();
+            client.lastPing = Date.now();
+          }
+          if (clientMsg.type == "hash") {
+            client.hashes.set(clientMsg.tick, clientMsg.hash);
+          }
+          if (clientMsg.type == "winner") {
+            this.winner = clientMsg.winner;
+          }
         } catch (error) {
-          throw Error(`error parsing schema for ${client.ip}`);
+          console.log(
+            `error handline websocket request in game server: ${error}`,
+          );
         }
-        if (this.allClients.has(clientMsg.clientID)) {
-          const client = this.allClients.get(clientMsg.clientID);
-          if (client.persistentID != clientMsg.persistentID) {
-            console.warn(
-              `Client ID ${clientMsg.clientID} sent incorrect id ${clientMsg.persistentID}, does not match persistent id ${client.persistentID}`,
-            );
-            return;
-          }
-        }
-
-        // Clear out persistent id to make sure it doesn't get sent to other clients.
-        clientMsg.persistentID = null;
-
-        if (clientMsg.type == "intent") {
-          if (clientMsg.gameID == this.id) {
-            this.addIntent(clientMsg.intent);
-          } else {
-            console.warn(
-              `${this.id}: client ${clientMsg.clientID} sent to wrong game`,
-            );
-          }
-        }
-        if (clientMsg.type == "ping") {
-          this.lastPingUpdate = Date.now();
-          client.lastPing = Date.now();
-        }
-        if (clientMsg.type == "hash") {
-          client.hashes.set(clientMsg.tick, clientMsg.hash);
-        }
-        if (clientMsg.type == "winner") {
-          this.winner = clientMsg.winner;
-        }
-      } catch (error) {
-        console.log(
-          `error handline websocket request in game server: ${error}`,
-        );
-      }
-    });
+      }),
+    );
     client.ws.on("close", () => {
       console.log(`${this.id}: client ${client.clientID} disconnected`);
       this.activeClients = this.activeClients.filter(

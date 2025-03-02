@@ -10,3 +10,4 @@
 .gitignore
 Dockerfile
 *.conf
+.gitmodules

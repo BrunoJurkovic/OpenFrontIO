@@ -13,6 +13,7 @@ import { GameConfig, GameRecord, LogSeverity } from "../core/Schemas";
 import { slog } from "./StructuredLog";
 import { GameType } from "../core/game/Game";
 import { archive } from "./Archive";
+import { LimiterType, securityMiddleware } from "./Security";
 
 const config = getServerConfig();
 
@@ -76,32 +77,10 @@ export function startWorker() {
     duration: 240, // 4 minutes
   });
 
-  // Async handler with rate limiting
-  const asyncHandler =
-    (fn: Function, limiter = null) =>
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        if (limiter) {
-          if (!isLocalhost(req)) {
-            const clientIP = req.ip || req.socket.remoteAddress || "unknown";
-            try {
-              await limiter.consume(clientIP);
-            } catch (error) {
-              console.warn(`Rate limited for IP ${clientIP}`);
-              return res.status(429).json({ error: "Too many requests" });
-            }
-          }
-        }
-        await fn(req, res, next);
-      } catch (error) {
-        next(error);
-      }
-    };
-
   // Endpoint to create a private lobby
   app.post(
     "/create_game/:id",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       const id = req.params.id;
       if (!id) {
         console.warn(`cannot create game, id not found`);
@@ -132,13 +111,13 @@ export function startWorker() {
         `Worker ${workerId}: IP ${clientIP} creating game ${game.isPublic() ? "Public" : "Private"} with id ${id}`,
       );
       res.json(game.gameInfo());
-    }, updateRateLimiter),
+    }, LimiterType.Post),
   );
 
   // Add other endpoints from your original server
   app.post(
     "/start_game/:id",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       console.log(`starting private lobby with id ${req.params.id}`);
       const game = gm.game(req.params.id);
       if (!game) {
@@ -153,12 +132,12 @@ export function startWorker() {
       }
       game.start();
       res.status(200).json({ success: true });
-    }, updateRateLimiter),
+    }, LimiterType.Post),
   );
 
   app.put(
     "/game/:id",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       // TODO: only update public game if from local host
       const lobbyID = req.params.id;
       if (req.body.gameType == GameType.Public) {
@@ -184,34 +163,34 @@ export function startWorker() {
         disableNPCs: req.body.disableNPCs,
       });
       res.status(200).json({ success: true });
-    }),
+    }, LimiterType.Put),
   );
 
   app.get(
     "/game/:id/exists",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       const lobbyId = req.params.id;
       res.json({
         exists: gm.game(lobbyId) != null,
       });
-    }),
+    }, LimiterType.Get),
   );
 
   app.get(
     "/game/:id",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       const game = gm.game(req.params.id);
       if (game == null) {
         console.log(`lobby ${req.params.id} not found`);
         return res.status(404).json({ error: "Game not found" });
       }
       res.json(game.gameInfo());
-    }),
+    }, LimiterType.Get),
   );
 
   app.post(
     "/archive_singleplayer_game",
-    asyncHandler(async (req, res) => {
+    securityMiddleware.httpHandler(async (req, res) => {
       const gameRecord: GameRecord = req.body;
       const clientIP = req.ip || req.socket.remoteAddress || "unknown";
 
@@ -225,71 +204,74 @@ export function startWorker() {
       res.json({
         success: true,
       });
-    }, updateRateLimiter),
+    }, LimiterType.Post),
   );
 
   // WebSocket handling
   wss.on("connection", (ws: WebSocket, req) => {
-    ws.on("message", async (message: string) => {
-      const forwarded = req.headers["x-forwarded-for"];
-      const ip = Array.isArray(forwarded)
-        ? forwarded[0]
-        : forwarded || req.socket.remoteAddress;
-      try {
-        await rateLimiter.consume(ip);
-      } catch (error) {
-        console.warn(`rate limit exceeded for ${ip}`);
-        return;
-      }
-
-      try {
-        // Process WebSocket messages as in your original code
-        // Parse and handle client messages
-        const clientMsg = JSON.parse(message.toString());
-
-        if (clientMsg.type == "join") {
-          // Verify this worker should handle this game
-          const expectedWorkerId = config.workerIndex(clientMsg.gameID);
-          if (expectedWorkerId !== workerId) {
-            console.warn(
-              `Worker mismatch: Game ${clientMsg.gameID} should be on worker ${expectedWorkerId}, but this is worker ${workerId}`,
-            );
-            return;
-          }
-
-          // Create client and add to game
-          const client = new Client(
-            clientMsg.clientID,
-            clientMsg.persistentID,
-            ip,
-            clientMsg.username,
-            ws,
-          );
-
-          const wasFound = gm.addClient(
-            client,
-            clientMsg.gameID,
-            clientMsg.lastTurn,
-          );
-
-          if (!wasFound) {
-            console.log(
-              `game ${clientMsg.gameID} not found on worker ${workerId}`,
-            );
-            // Handle game not found case
-          }
+    ws.on(
+      "message",
+      securityMiddleware.wsHandler(req, async (message: string) => {
+        const forwarded = req.headers["x-forwarded-for"];
+        const ip = Array.isArray(forwarded)
+          ? forwarded[0]
+          : forwarded || req.socket.remoteAddress;
+        try {
+          await rateLimiter.consume(ip);
+        } catch (error) {
+          console.warn(`rate limit exceeded for ${ip}`);
+          return;
         }
 
-        // Handle other message types
-      } catch (error) {
-        console.warn(
-          `error handling websocket message for ${ip}: ${error}`.substring(
-            0,
-            250,
-          ),
-        );
-      }
-    });
+        try {
+          // Process WebSocket messages as in your original code
+          // Parse and handle client messages
+          const clientMsg = JSON.parse(message.toString());
+
+          if (clientMsg.type == "join") {
+            // Verify this worker should handle this game
+            const expectedWorkerId = config.workerIndex(clientMsg.gameID);
+            if (expectedWorkerId !== workerId) {
+              console.warn(
+                `Worker mismatch: Game ${clientMsg.gameID} should be on worker ${expectedWorkerId}, but this is worker ${workerId}`,
+              );
+              return;
+            }
+
+            // Create client and add to game
+            const client = new Client(
+              clientMsg.clientID,
+              clientMsg.persistentID,
+              ip,
+              clientMsg.username,
+              ws,
+            );
+
+            const wasFound = gm.addClient(
+              client,
+              clientMsg.gameID,
+              clientMsg.lastTurn,
+            );
+
+            if (!wasFound) {
+              console.log(
+                `game ${clientMsg.gameID} not found on worker ${workerId}`,
+              );
+              // Handle game not found case
+            }
+          }
+
+          // Handle other message types
+        } catch (error) {
+          console.warn(
+            `error handling websocket message for ${ip}: ${error}`.substring(
+              0,
+              250,
+            ),
+          );
+        }
+      }),
+    );
 
     ws.on("error", (error: Error) => {
       if ((error as any).code === "WS_ERR_UNEXPECTED_RSV_1") {
