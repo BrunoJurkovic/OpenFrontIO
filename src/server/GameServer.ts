@@ -64,35 +64,88 @@ export class GameServer {
     );
   }
 
+  private determineGameState(): GamePhase {
+    // Already started games stay ACTIVE (or FINISHED if conditions met)
+    if (this._hasStarted) {
+      const noRecentPings = Date.now() > this.lastPingUpdate + 20 * 1000;
+      const noActive = this.activeClients.length === 0;
+
+      if (noActive && noRecentPings) {
+        return GamePhase.Finished;
+      }
+      return GamePhase.Active;
+    }
+
+    // Non-public games in lobby
+    if (!this.isPublic()) {
+      return GamePhase.Lobby;
+    }
+
+    // Now handle public games that haven't started
+    const now = Date.now();
+    const currentPlayers = this.numClients();
+    const minPlayers = this.config.minPlayerThreshold();
+
+    // First check: Is it time to start the game?
+    if (now >= this._scheduledStartTime && currentPlayers >= minPlayers) {
+      // We have enough players and time has elapsed - start the game!
+      consolex.log(
+        `${this.id}: Starting game with ${currentPlayers}/${minPlayers} players`,
+      );
+      this.start();
+      return GamePhase.Active;
+    }
+
+    // Second check: Should we extend the time?
+    if (now >= this._scheduledStartTime && currentPlayers < minPlayers) {
+      // Time elapsed but not enough players - extend the timer
+      this._scheduledStartTime = now + 15 * 1000;
+      consolex.log(
+        `${this.id}: Extended lobby time to ${new Date(this._scheduledStartTime).toISOString()} (${currentPlayers}/${minPlayers} players)`,
+      );
+    }
+
+    // Third check: Should we reduce the time?
+    if (
+      now < this._scheduledStartTime &&
+      currentPlayers >= this.config.targetPlayerCount()
+    ) {
+      // We reached target player count - start sooner
+      const minTimeFromNow = 10 * 1000; // 10 seconds
+      const newStartTime = now + minTimeFromNow;
+
+      if (newStartTime < this._scheduledStartTime) {
+        this._scheduledStartTime = newStartTime;
+        console.log(
+          `${this.id}: Target players reached, starting in ${minTimeFromNow / 1000} seconds`,
+        );
+      }
+    }
+
+    // Still in LOBBY
+    return GamePhase.Lobby;
+  }
+
   public remainingLobbyTime(): number {
     if (this._hasStarted || !this.isPublic()) {
       return 0;
     }
 
     const now = Date.now();
-
-    // Check if we should update the scheduled start time
-    this.updateScheduledStartTime();
-
-    // Calculate remaining time, ensuring it's never negative
-    const remaining = Math.max(0, this._scheduledStartTime - now);
-
-    // Debug logging
-    if (remaining === 0) {
-      console.log(
-        `${this.id}: Lobby time expired, has ${this.numClients()} players (min: ${this.config.minPlayerThreshold()})`,
-      );
-    }
-
-    return remaining;
+    return Math.max(0, this._scheduledStartTime - now);
   }
 
   private updateScheduledStartTime(): void {
+    if (this._hasStarted) {
+      console.log(
+        `${this.id}: Skipping extension because game has already started`,
+      );
+      return;
+    }
     const now = Date.now();
     const currentPlayers = this.numClients();
     const minPlayers = this.config.minPlayerThreshold();
 
-    // If time has expired but we don't have enough players, extend
     if (now >= this._scheduledStartTime && currentPlayers < minPlayers) {
       // Extend by 30 seconds from now
       this._scheduledStartTime = now + 30 * 1000;
@@ -291,6 +344,7 @@ export class GameServer {
       return; // Don't start twice
     }
 
+    console.log(`${this.id}: GAME STARTING NOW`);
     this._hasStarted = true;
     this._startTime = Date.now();
 
@@ -303,7 +357,7 @@ export class GameServer {
     );
 
     this.activeClients.forEach((c) => {
-      console.log(`${this.id}: sending start message to ${c.clientID}`);
+      consolex.log(`${this.id}: sending start message to ${c.clientID}`);
       this.sendStartGameMsg(c.ws, 0);
     });
   }
@@ -419,9 +473,8 @@ export class GameServer {
   }
 
   public phase(): GamePhase {
+    // Handle client cleanup
     const now = Date.now();
-
-    // Handle client cleanup (keep existing logic)
     const alive = [];
     for (const client of this.activeClients) {
       if (now - client.lastPing > 60_000) {
@@ -443,52 +496,8 @@ export class GameServer {
       return GamePhase.Finished;
     }
 
-    const noRecentPings = now > this.lastPingUpdate + 20 * 1000;
-    const noActive = this.activeClients.length == 0;
-
-    // Non-public games
-    if (!this.isPublic()) {
-      if (this._hasStarted) {
-        if (noActive && noRecentPings) {
-          console.log(`${this.id}: private game: ${this.id} complete`);
-          return GamePhase.Finished;
-        } else {
-          return GamePhase.Active;
-        }
-      } else {
-        return GamePhase.Lobby;
-      }
-    }
-
-    // Public games
-
-    // 1. If already started, stay ACTIVE or finish
-    if (this._hasStarted) {
-      if (noActive && noRecentPings) {
-        return GamePhase.Finished;
-      }
-      return GamePhase.Active;
-    }
-
-    // 2. Check remaining lobby time
-    const remainingTime = this.remainingLobbyTime();
-
-    // 3. If time remains, stay in LOBBY
-    if (remainingTime > 0) {
-      return GamePhase.Lobby;
-    }
-
-    // 4. Time expired - check if we have minimum players
-    if (this.numClients() < this.config.minPlayerThreshold()) {
-      // This shouldn't happen due to our extension logic, but just in case
-      this.updateScheduledStartTime(); // This will extend the time
-      return GamePhase.Lobby;
-    }
-
-    // 5. Start the game
-    console.log(`${this.id}: Starting game with ${this.numClients()} players`);
-    this.start();
-    return GamePhase.Active;
+    // Determine actual phase
+    return this.determineGameState();
   }
 
   hasStarted(): boolean {
@@ -496,36 +505,8 @@ export class GameServer {
   }
 
   public gameInfo(): GameInfo {
-    // Calculate the absolute timestamp when game will start
-    let startTimeTimestamp: number;
-
-    if (this._hasStarted) {
-      // If game has already started, use the actual start time
-      startTimeTimestamp = this._startTime || Date.now();
-    } else if (this.isPublic()) {
-      // For public games in lobby, use the scheduled start time
-      // This should be a future timestamp (createdAt + some duration)
-      startTimeTimestamp = this.createdAt + this.config.initialLobbyLifetime();
-
-      // If we have a specific scheduled start time from our dynamic logic, use that
-      if (this._scheduledStartTime) {
-        startTimeTimestamp = this._scheduledStartTime;
-      }
-
-      // Ensure the timestamp is in the future
-      const now = Date.now();
-      if (startTimeTimestamp < now) {
-        startTimeTimestamp = now + 30000; // Default to 30 seconds in the future if needed
-      }
-    } else {
-      // Non-public games
-      startTimeTimestamp = Date.now();
-    }
-
-    // Log the value we're returning for debugging
-    console.log(
-      `${this.id}: Reporting msUntilStart as ${startTimeTimestamp} (${new Date(startTimeTimestamp).toISOString()}, ${startTimeTimestamp - Date.now()}ms from now)`,
-    );
+    // This call ensures our state is up-to-date
+    this.determineGameState();
 
     return {
       gameID: this.id,
@@ -534,9 +515,10 @@ export class GameServer {
         clientID: c.clientID,
       })),
       gameConfig: this.gameConfig,
-      msUntilStart: startTimeTimestamp,
+      msUntilStart: this._hasStarted ? Date.now() : this._scheduledStartTime,
+      hasStarted: this._hasStarted,
 
-      // Additional UI info if needed
+      // Additional UI info
       currentPlayers: this.numClients(),
       targetPlayers: this.config.targetPlayerCount(),
       minPlayers: this.config.minPlayerThreshold(),

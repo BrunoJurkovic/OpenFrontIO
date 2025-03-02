@@ -71,14 +71,28 @@ export async function startMaster() {
         let timeoutId = null;
 
         const scheduleLobbies = () => {
-          schedulePublicGame()
+          // First, check if we already have active lobbies
+          fetchLobbies()
+            .then(() => {
+              // If no lobbies exist after fetching (fetching will create one if needed),
+              // create one as a fallback
+              if (publicLobbyIDs.size === 0) {
+                console.log(
+                  "Fallback: Creating public lobby because none exist",
+                );
+                return schedulePublicGame();
+              }
+            })
             .catch((error) => {
-              console.error("Error scheduling public game:", error);
+              console.error("Error during lobby check:", error);
+              // Create a lobby anyway if there was an error
+              return schedulePublicGame();
             })
             .finally(() => {
-              // Schedule next run with the current config value
-              const currentLifetime = config.gameCreationRate();
-              timeoutId = setTimeout(scheduleLobbies, currentLifetime);
+              // Always reschedule the check with a longer interval since we have the
+              // more frequent fetchLobbies() running
+              const checkInterval = 30 * 1000; // Check every 30 seconds as a fallback
+              timeoutId = setTimeout(scheduleLobbies, checkInterval);
             });
         };
 
@@ -156,14 +170,37 @@ async function fetchLobbies(): Promise<void> {
         numClients: gi?.clients?.length ?? 0,
         gameConfig: gi.gameConfig,
         msUntilStart: (gi.msUntilStart ?? Date.now()) - Date.now(),
+        hasStarted: gi.hasStarted, // Keep the hasStarted flag
       } as GameInfo;
     });
 
+  // Track if we need to create a new lobby
+  let needNewLobby = false;
+  let activeLobbies = 0;
+
   lobbyInfos.forEach((l) => {
-    if (l.msUntilStart <= 250) {
+    // ONLY consider games as started when hasStarted is true
+    if (l.hasStarted === true) {
+      console.log(`Game ${l.gameID} has explicitly started`);
       publicLobbyIDs.delete(l.gameID);
+      needNewLobby = true;
+    } else {
+      // Count active lobbies that are still in waiting state
+      activeLobbies++;
     }
   });
+
+  // If we need a new lobby or have no active lobbies left, create one
+  if (needNewLobby || activeLobbies === 0) {
+    console.log(
+      "Creating new public lobby. Reason: " +
+        (needNewLobby ? "Previous lobby started" : "No active lobbies"),
+    );
+
+    schedulePublicGame().catch((error) => {
+      console.error("Error creating new public game:", error);
+    });
+  }
 
   // Update the JSON string
   publicLobbiesJsonStr = JSON.stringify({

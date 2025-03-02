@@ -84,6 +84,7 @@ export interface GameInfo {
   currentPlayers?: number;
   targetPlayers?: number;
   minPlayers?: number;
+  hasStarted?: boolean;
 }
 export interface ClientInfo {
   clientID: ClientID;
