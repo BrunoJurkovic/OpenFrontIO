@@ -10,7 +10,6 @@ export class UserSettings {
 
   set(key: string, value: boolean) {
     localStorage.setItem(key, value ? "true" : "false");
-    document.body.classList.toggle("dark");
   }
 
   emojis() {
@@ -27,5 +26,10 @@ export class UserSettings {
 
   toggleDarkMode() {
     this.set("settings.darkMode", !this.darkMode());
+    if (this.darkMode()) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }
 }
