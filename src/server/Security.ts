@@ -27,33 +27,7 @@ export interface SecurityMiddleware {
 
 // Function to get the appropriate security middleware implementation
 async function getSecurityMiddleware(): Promise<SecurityMiddleware> {
-  try {
-    // Get the current file's directory
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-
-    try {
-      // Use dynamic import for ES modules - without file extension
-      // ts-node will resolve this correctly
-      const module = await import(
-        "./security-middleware/RealSecurityMiddleware"
-      );
-
-      if (!module.RealSecurityMiddleware) {
-        throw new Error("RealSecurityMiddleware class not found in module");
-      }
-
-      console.log("Successfully loaded real security middleware");
-      return new module.RealSecurityMiddleware();
-    } catch (error) {
-      console.log("Failed to load real security middleware:", error);
-      return new NoOpSecurityMiddleware();
-    }
-  } catch (e) {
-    // Fall back to no-op if real implementation isn't available
-    console.log("using no-op security middleware", e);
-    return new NoOpSecurityMiddleware();
-  }
+  return null;
 }
 
 export class NoOpSecurityMiddleware implements SecurityMiddleware {

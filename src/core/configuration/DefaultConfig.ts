@@ -30,16 +30,23 @@ export abstract class DefaultServerConfig implements ServerConfig {
   turnIntervalMs(): number {
     return 100;
   }
-  gameCreationRate(highTraffic: boolean): number {
-    if (highTraffic) {
-      return 30 * 1000;
-    } else {
-      return 60 * 1000;
-    }
+  gameCreationRate(): number {
+    return 60 * 1000; // 60 seconds
   }
-  lobbyLifetime(highTraffic: boolean): number {
-    return this.gameCreationRate(highTraffic) * 2;
+
+  // Simplified lobby timing
+  initialLobbyLifetime(): number {
+    return 60 * 1000; // 60 seconds default
   }
+
+  minPlayerThreshold(): number {
+    return 10; // Minimum players before game starts
+  }
+
+  targetPlayerCount(): number {
+    return 40; // Target player count
+  }
+
   workerIndex(gameID: GameID): number {
     return simpleHash(gameID) % this.numWorkers();
   }

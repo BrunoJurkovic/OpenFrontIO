@@ -81,6 +81,9 @@ export interface GameInfo {
   numClients?: number;
   msUntilStart?: number;
   gameConfig?: GameConfig;
+  currentPlayers?: number;
+  targetPlayers?: number;
+  minPlayers?: number;
 }
 export interface ClientInfo {
   clientID: ClientID;

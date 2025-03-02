@@ -77,8 +77,7 @@ export async function startMaster() {
             })
             .finally(() => {
               // Schedule next run with the current config value
-              const currentLifetime =
-                config.gameCreationRate(isHighTrafficTime());
+              const currentLifetime = config.gameCreationRate();
               timeoutId = setTimeout(scheduleLobbies, currentLifetime);
             });
         };

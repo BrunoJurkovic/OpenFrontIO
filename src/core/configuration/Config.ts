@@ -63,8 +63,10 @@ export function getServerConfig(): ServerConfig {
 
 export interface ServerConfig {
   turnIntervalMs(): number;
-  gameCreationRate(highTraffic: boolean): number;
-  lobbyLifetime(highTraffic): number;
+  gameCreationRate(): number;
+  initialLobbyLifetime(): number;
+  minPlayerThreshold(): number;
+  targetPlayerCount(): number;
   discordRedirectURI(): string;
   numWorkers(): number;
   workerIndex(gameID: GameID): number;
